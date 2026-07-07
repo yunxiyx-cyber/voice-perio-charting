@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>語音填表 M0 收音測試</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang TC", sans-serif; background: #111; color: #eee;
+         display: flex; flex-direction: column; height: 100dvh; }
+  header { padding: 10px 14px; background: #1c1c1e; }
+  h1 { font-size: 16px; font-weight: 600; }
+  #stats { font-size: 12px; color: #9a9aa0; margin-top: 4px; line-height: 1.6; }
+  #stats b { color: #ffd60a; font-weight: 600; }
+  #pairs { padding: 8px 14px; background: #0a2a12; min-height: 74px; border-bottom: 1px solid #333; }
+  #pairs .label { font-size: 11px; color: #7bd88f; }
+  #pairRow { font-size: 20px; font-weight: 700; color: #7bd88f; margin-top: 2px; min-height: 26px; }
+  #pairNote { font-size: 12px; color: #ff9f0a; min-height: 16px; }
+  #log { flex: 1; overflow-y: auto; padding: 10px 14px; font-size: 14px; line-height: 1.5;
+         -webkit-overflow-scrolling: touch; }
+  .line { margin-bottom: 6px; word-break: break-all; }
+  .line .t { color: #6e6e73; font-size: 11px; margin-right: 6px; }
+  .final { color: #fff; }
+  .interim { color: #6e6e73; font-style: italic; }
+  .event { color: #ff453a; font-size: 12px; }
+  .ok { color: #30d158; font-size: 12px; }
+  footer { padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: #1c1c1e;
+           display: flex; gap: 10px; }
+  button { flex: 1; padding: 16px 0; font-size: 18px; font-weight: 700; border: none;
+           border-radius: 12px; color: #fff; }
+  #btnStart { background: #30d158; color: #000; }
+  #btnStart.running { background: #ff453a; color: #fff; }
+  #btnClear { background: #3a3a3c; flex: 0 0 90px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>M0 收音測試 <span id="micState">⚪ 未啟動</span></h1>
+  <div id="stats">運行 <b id="sDur">0</b> 秒｜自動重啟 <b id="sRestart">0</b> 次｜平均間隔 <b id="sAvg">–</b> 秒｜最終句 <b id="sFinal">0</b></div>
+</header>
+<div id="pairs">
+  <div class="label">數對解析展示（PD→CAL 兩兩配對；黏字會標警告）</div>
+  <div id="pairRow"></div>
+  <div id="pairNote"></div>
+</div>
+<div id="log"></div>
+<footer>
+  <button id="btnStart">開始收音</button>
+  <button id="btnClear">清空</button>
+</footer>
+<script>
+const $ = id => document.getElementById(id);
+const log = (html, cls) => {
+  const d = document.createElement('div');
+  d.className = 'line ' + (cls || '');
+  d.innerHTML = `<span class="t">${new Date().toTimeString().slice(0,8)}</span>${html}`;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+  return d;
+};
+
+// ---- 中文數字正規化（0–19，spike 版） ----
+const ZH = {'零':0,'〇':0,'一':1,'幺':1,'二':2,'兩':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+function extractNumbers(text) {
+  const out = [], warn = [];
+  // 先抓「十X」「X十」「十」，再抓單一中文數字，再抓阿拉伯數字塊
+  const re = /(十[一二三四五六七八九]?)|([一二三四五六七八九]十)|([零〇一幺二兩三四五六七八九])|(\d+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m[1]) out.push(m[1].length === 1 ? 10 : 10 + ZH[m[1][1]]);
+    else if (m[2]) out.push(ZH[m[2][0]] * 10);
+    else if (m[3]) out.push(ZH[m[3]]);
+    else if (m[4]) {
+      const s = m[4];
+      if (s.length === 1) out.push(+s);
+      else if (+s <= 19) { out.push(+s); warn.push(`黏字「${s}」當作一個值`); }
+      else { // 黏成一大串：spike 版先逐位拆，記警告供統計
+        warn.push(`黏字「${s}」逐位拆開`);
+        for (const c of s) out.push(+c);
+      }
+    }
+  }
+  return { nums: out.filter(n => n <= 19), warn };
+}
+
+let allNums = [];
+function renderPairs() {
+  const pairs = [];
+  for (let i = 0; i + 1 < allNums.length; i += 2) pairs.push(`PD ${allNums[i]}/CAL ${allNums[i+1]}`);
+  const tail = allNums.length % 2 ? `（＋${allNums[allNums.length-1]} 待配對）` : '';
+  $('pairRow').textContent = pairs.slice(-4).join('　') + tail;
+}
+
+// ---- 統計 ----
+let t0 = null, restarts = 0, finals = 0, timer = null;
+function tick() {
+  if (!t0) return;
+  const dur = Math.round((Date.now() - t0) / 1000);
+  $('sDur').textContent = dur;
+  $('sRestart').textContent = restarts;
+  $('sAvg').textContent = restarts ? (dur / restarts).toFixed(1) : '–';
+  $('sFinal').textContent = finals;
+}
+
+// ---- Wake Lock ----
+let wakeLock = null;
+async function acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      log('Wake Lock 已取得（螢幕不熄）', 'ok');
+    } else log('此瀏覽器不支援 Wake Lock', 'event');
+  } catch (e) { log('Wake Lock 失敗：' + e.message, 'event'); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (running && document.visibilityState === 'visible') acquireWakeLock();
+});
+
+// ---- 語音辨識＋自動重啟 ----
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, running = false, interimLine = null;
+
+function makeRec() {
+  const r = new SR();
+  r.lang = 'zh-TW';
+  r.continuous = true;
+  r.interimResults = true;
+  r.onresult = (ev) => {
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const res = ev.results[i], text = res[0].transcript.trim();
+      if (!text) continue;
+      if (res.isFinal) {
+        if (interimLine) { interimLine.remove(); interimLine = null; }
+        finals++;
+        const { nums, warn } = extractNumbers(text);
+        allNums.push(...nums);
+        renderPairs();
+        $('pairNote').textContent = warn.join('；');
+        log(`${text}${nums.length ? ` <span class="ok">→ [${nums.join(',')}]</span>` : ''}`, 'final');
+      } else {
+        if (!interimLine) interimLine = log('', 'interim');
+        interimLine.innerHTML = `<span class="t">…</span>${text}`;
+      }
+    }
+  };
+  r.onerror = (ev) => log(`錯誤：${ev.error}`, 'event');
+  r.onend = () => {
+    if (!running) { $('micState').textContent = '⚪ 已停止'; return; }
+    restarts++;
+    log(`── 辨識中斷，自動重啟（第 ${restarts} 次）──`, 'event');
+    $('micState').textContent = '🔴 重連中';
+    try { rec = makeRec(); rec.start(); $('micState').textContent = '🟢 監聽中'; }
+    catch (e) { setTimeout(() => { if (running) { rec = makeRec(); rec.start(); } }, 300); }
+  };
+  return r;
+}
+
+$('btnStart').onclick = async () => {
+  if (!SR) { log('此瀏覽器不支援 SpeechRecognition', 'event'); return; }
+  if (!running) {
+    running = true; t0 = Date.now(); restarts = 0; finals = 0;
+    timer = setInterval(tick, 1000);
+    await acquireWakeLock();
+    rec = makeRec();
+    rec.start();
+    $('micState').textContent = '🟢 監聽中';
+    $('btnStart').textContent = '停止';
+    $('btnStart').classList.add('running');
+    log('開始收音（zh-TW / continuous）', 'ok');
+  } else {
+    running = false;
+    rec && rec.stop();
+    clearInterval(timer); tick();
+    wakeLock && wakeLock.release().catch(() => {});
+    $('btnStart').textContent = '開始收音';
+    $('btnStart').classList.remove('running');
+    log(`停止。總計：${$('sDur').textContent}s／重啟 ${restarts} 次／最終句 ${finals}`, 'ok');
+  }
+};
+$('btnClear').onclick = () => { $('log').innerHTML = ''; allNums = []; renderPairs(); $('pairNote').textContent = ''; };
+</script>
+</body>
+</html>
