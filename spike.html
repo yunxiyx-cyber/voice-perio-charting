@@ -40,7 +40,7 @@
   <div id="stats">運行 <b id="sDur">0</b> 秒｜自動重啟 <b id="sRestart">0</b> 次｜平均間隔 <b id="sAvg">–</b> 秒｜最終句 <b id="sFinal">0</b></div>
 </header>
 <div id="pairs">
-  <div class="label">數對解析展示（PD→CAL 兩兩配對；黏字會標警告）</div>
+  <div class="label">數對解析展示（PD/CAL 兩兩配對，每 3 點＝一顆牙；黏字會標警告）</div>
   <div id="pairRow"></div>
   <div id="pairNote"></div>
 </div>
@@ -85,11 +85,16 @@ function extractNumbers(text) {
 }
 
 let allNums = [];
-function renderPairs() {
+function renderPairs(warn) {
   const pairs = [];
-  for (let i = 0; i + 1 < allNums.length; i += 2) pairs.push(`PD ${allNums[i]}/CAL ${allNums[i+1]}`);
-  const tail = allNums.length % 2 ? `（＋${allNums[allNums.length-1]} 待配對）` : '';
-  $('pairRow').textContent = pairs.slice(-4).join('　') + tail;
+  for (let i = 0; i + 1 < allNums.length; i += 2) pairs.push(`${allNums[i]}/${allNums[i+1]}`);
+  const teeth = [];
+  for (let i = 0; i < pairs.length; i += 3) teeth.push(pairs.slice(i, i + 3).join('  '));
+  const shown = teeth.map((t, i) => `〔牙${i+1}〕${t}`).slice(-2).join('　');
+  const tail = allNums.length % 2 ? `　＋${allNums[allNums.length-1]}（待配對）` : '';
+  $('pairRow').textContent = shown + tail;
+  const count = `共 ${allNums.length} 值＝${pairs.length} 點＝${(pairs.length / 3).toFixed(1)} 顆牙`;
+  $('pairNote').textContent = count + ((warn && warn.length) ? '｜' + warn.join('；') : '');
 }
 
 // ---- 統計 ----
@@ -135,8 +140,7 @@ function makeRec() {
         finals++;
         const { nums, warn } = extractNumbers(text);
         allNums.push(...nums);
-        renderPairs();
-        $('pairNote').textContent = warn.join('；');
+        renderPairs(warn);
         log(`${text}${nums.length ? ` <span class="ok">→ [${nums.join(',')}]</span>` : ''}`, 'final');
       } else {
         if (!interimLine) interimLine = log('', 'interim');
