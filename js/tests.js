@@ -73,6 +73,16 @@ export const CASES = [
     eq(events[0].type, 'error');
     eq(events[0].code, 'ambiguous');
   }],
+  ['parser：獨立雙位 token 直讀（iOS 把「十五」轉寫成 15）', () => {
+    eq(parse('15 15', { mode: 'pdcal', needed: 6 }).events, [{ type: 'values', values: [15, 15] }]);
+    eq(parse('10', { mode: 'pdcal', needed: 6 }).events, [{ type: 'values', values: [10] }]);
+    eq(parse('11 12', { mode: 'pdcal', needed: 6 }).events, [{ type: 'values', values: [11, 12] }]);
+    eq(parse('33', { mode: 'pdcal', needed: 6 }).events, [{ type: 'values', values: [3, 3] }], '值>19 仍走黏字切分');
+  }],
+  ['parser：「出血」＝BOP 入口、「進」＝「近」', () => {
+    eq(parse('出血', { mode: 'pdcal' }).events, [{ type: 'command', name: 'bop' }]);
+    eq(parse('17 進', { mode: 'bop' }).events, [{ type: 'bopReport', tooth: 17, side: null, points: ['M'] }]);
+  }],
   ['parser：純雜訊無事件', () => {
     const { events, noise } = parse('呃嗯那個', { mode: 'pdcal', needed: 6 });
     eq(events, []);
@@ -141,6 +151,12 @@ export const CASES = [
   }],
 
   // session：黏字、錯誤、修正
+  ['阿拉伯雙位值直填（PD 11 / CAL 12）', () => {
+    const s = mkSession({ missing: [18] });
+    say(s, '11 12');
+    eq(s.chart.teeth['17'].facial.pd[0], 11);
+    eq(s.chart.teeth['17'].facial.cal[0], 12);
+  }],
   ['黏字 33 當一點收', () => {
     const s = mkSession({ missing: [18] });
     say(s, '33');

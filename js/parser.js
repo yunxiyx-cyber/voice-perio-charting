@@ -20,10 +20,11 @@ const KEYWORDS = [
   { w: '繼續', t: 'resume' },
   { w: '完成', t: 'finish' },
   { w: 'bop', t: 'bop' },
+  { w: '出血', t: 'bop' }, // zh-TW 辨識不會吐英文「bop」，臨床口語「出血」當同義入口
   { w: '改', t: 'redoTooth' },
 ].sort((a, b) => b.w.length - a.w.length);
 
-const POINT_WORDS = { '近': 'M', '遠': 'D', '中': 'mid', '全': 'all' }; // 僅 bop/pi 模式有意義
+const POINT_WORDS = { '近': 'M', '進': 'M', '遠': 'D', '中': 'mid', '全': 'all' }; // 僅 bop/pi 模式有意義；「進」＝「近」同音誤辨
 const SIDE_WORDS = { '頰': 'facial', '舌': 'lingual', '顎': 'lingual' }; // 僅 pi 模式有意義
 const FILLERS = new Set([...' \t\n\r，。、,.？?！!；;：:～~的了呃嗯啊喔哦欸唉']);
 
@@ -136,6 +137,13 @@ export function parse(text, ctx = {}) {
       let values;
       if (arabic) {
         if (mode === 'pdcal') {
+          // 獨立 token（≤2 位、值 ≤19）直讀單值：iOS 把「十五」轉寫成「15」，
+          // 走枚舉切分會與 [1,5] 撞成多解——token 邊界本身就是斷點，不切。
+          const asInt = parseInt(run, 10);
+          if (run.length <= 2 && asInt <= 19) {
+            vals.push(asInt);
+            continue;
+          }
           const remaining = Math.max(1, needed - vals.length);
           const segs = segmentDigits(run, remaining);
           if (segs.length === 1) values = segs[0];

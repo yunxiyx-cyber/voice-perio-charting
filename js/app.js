@@ -130,7 +130,7 @@ function processFeedback(fb) {
       case 'error': dada = true; banner = errorText(f); break;
       case 'noise': dada = true; break;
       case 'passStart': banner = `新段落：${f.passId}（起於 ${f.tooth}）`; break;
-      case 'passDone': banner = `${f.passId} 完成，可唸「BOP」進出血輪或直接唸下一段`; break;
+      case 'passDone': banner = `${f.passId} 完成，可唸「出血」進 BOP 輪或直接唸下一段`; break;
       case 'allDone': banner = '全口 PD/CAL 已收完'; break;
       case 'enterBop': banner = `進入 BOP 出血輪（${f.passId}）`; break;
       case 'finishBop': banner = 'BOP 輪完成'; break;
@@ -233,6 +233,7 @@ function bind() {
   };
   $('btnUndo').onclick = () => { feedback.unlock(); handleText('復原'); };
   $('ttsToggle').onchange = (e) => { feedback.ttsEnabled = e.target.checked; };
+  $('fastToggle').onchange = (e) => { recognizer && recognizer.setFast(e.target.checked); };
 
   // demo 文字輸入（模擬語音）
   $('demoSend').onclick = sendDemo;
