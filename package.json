@@ -1,0 +1,8 @@
+{
+  "name": "voice-perio-charting",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node run_tests.mjs"
+  }
+}

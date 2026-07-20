@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>voice-perio-charting Phase 1 測試</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 1.5rem; max-width: 48rem; }
+  h1 { font-size: 1.2rem; }
+  #summary { font-weight: bold; margin: 0.8rem 0; }
+  .pass { color: #1a7f37; }
+  .fail { color: #cf222e; }
+  li { margin: 0.15rem 0; }
+  .detail { color: #cf222e; font-size: 0.85em; margin-left: 1.5rem; white-space: pre-wrap; }
+  .note { color: #666; font-size: 0.85em; }
+</style>
+</head>
+<body>
+<h1>voice-perio-charting — Phase 1 純邏輯層測試</h1>
+<p class="note">合成資料單元測試（parser／session／store）。真實 pilot 重播比對只在本機 Node 跑（run_tests.mjs），不在此頁。<br>
+本頁需經 http 伺服器開啟（ES module 不吃 file://），例如 <code>npx http-server</code>。</p>
+<div id="summary">執行中…</div>
+<ul id="list"></ul>
+<script type="module">
+  import { runAll } from './js/tests.js';
+  const results = runAll();
+  const list = document.getElementById('list');
+  let failed = 0;
+  for (const r of results) {
+    const li = document.createElement('li');
+    li.className = r.pass ? 'pass' : 'fail';
+    li.textContent = `${r.pass ? '✓' : '✗'} ${r.name}`;
+    if (!r.pass) {
+      failed++;
+      const d = document.createElement('div');
+      d.className = 'detail';
+      d.textContent = r.detail;
+      li.appendChild(d);
+    }
+    list.appendChild(li);
+  }
+  const s = document.getElementById('summary');
+  s.textContent = `${results.length - failed}/${results.length} passed`;
+  s.className = failed ? 'fail' : 'pass';
+</script>
+</body>
+</html>
