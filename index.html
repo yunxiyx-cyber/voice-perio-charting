@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🦷</text></svg>">
+<title>語音牙周填表</title>
+<style>
+  :root {
+    --cw: 18px;   /* 單點格寬 */
+    --rh: 26px;   /* 數值列高 */
+    --lw: 52px;   /* 列標籤寬 */
+    --accent: #2266ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body { font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+         background: #eef0f3; color: #1b1c1f; }
+  .screen { display: none; flex-direction: column; height: 100dvh; }
+  .screen.active { display: flex; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ---- 通用頁首 ---- */
+  .bar { background: #1c1c1e; color: #fff; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+  .bar h1 { font-size: 16px; font-weight: 600; }
+  .bar .spacer { flex: 1; }
+  .content { flex: 1; overflow-y: auto; padding: 14px; }
+
+  /* ---- 病例清單 ---- */
+  #caseList { display: flex; flex-direction: column; gap: 8px; }
+  .caserow { display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+             background: #fff; border: 1px solid #d5d8dd; border-radius: 10px; padding: 12px 14px; text-align: left; }
+  .cname { font-size: 17px; font-weight: 600; }
+  .cmeta { font-size: 12px; color: #6b6f76; }
+  .empty { color: #6b6f76; font-size: 14px; padding: 20px 4px; }
+  .primary { background: var(--accent); color: #fff; border: none; border-radius: 12px;
+             padding: 15px 0; font-size: 17px; font-weight: 700; width: 100%; }
+  .ghost { background: #e6e8ec; color: #1b1c1f; border: none; border-radius: 12px; padding: 13px 18px; font-size: 15px; }
+  .footbtns { padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); background: #f7f8fa;
+              border-top: 1px solid #e0e2e6; display: flex; gap: 10px; }
+
+  /* ---- 表單 ---- */
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  .field label { font-size: 13px; color: #4a4d53; font-weight: 600; }
+  .field input, .field select { font-size: 16px; padding: 11px 12px; border: 1px solid #c9ccd2; border-radius: 9px; background: #fff; }
+
+  /* ---- 缺牙預標 ---- */
+  .misshint { font-size: 13px; color: #4a4d53; margin-bottom: 12px; line-height: 1.6; }
+  .missrow { display: flex; flex-wrap: nowrap; gap: 4px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .misscap { font-size: 12px; color: #6b6f76; margin: 6px 0 3px; }
+  .mtooth { flex: 0 0 auto; min-width: 40px; height: 46px; border: 1px solid #c1c4ca; border-radius: 8px;
+            background: #fff; font-size: 14px; }
+  .mtooth.picked { background: #3a3a3c; color: #fff; border-color: #3a3a3c; text-decoration: line-through; }
+
+  /* ---- 主畫面頁首 ---- */
+  #topbar { background: #1c1c1e; color: #fff; padding: 8px 12px calc(8px);
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #topbar .pinfo { display: flex; flex-direction: column; line-height: 1.25; }
+  #mPatient { font-size: 16px; font-weight: 700; }
+  #mStage { font-size: 11px; color: #b8bcc4; }
+  #micLight { font-size: 13px; background: #2c2c2e; padding: 6px 10px; border-radius: 20px; white-space: nowrap; }
+  .topbtn { border: none; border-radius: 10px; padding: 12px 16px; font-size: 15px; font-weight: 700; color: #fff; min-height: 46px; }
+  #btnPause { background: #3a3a3c; }
+  #btnUndo { background: #b25000; }
+  #btnBackList { background: #2c2c2e; color: #cfd2d8; font-weight: 600; padding: 10px 12px; }
+  #topbar .tts { font-size: 12px; color: #cfd2d8; display: flex; align-items: center; gap: 4px; }
+  #progress { font-size: 12px; color: #b8bcc4; }
+
+  /* ---- 轉場橫幅 ---- */
+  #banner { max-height: 0; overflow: hidden; background: #0a2a12; color: #7bd88f; font-size: 13px;
+            transition: max-height .2s, padding .2s; padding: 0 14px; }
+  #banner.show { max-height: 60px; padding: 8px 14px; }
+
+  /* ---- 表格區 ---- */
+  #chart { flex: 1; overflow-y: auto; padding: 8px 0 10px; background: #eef0f3; }
+  .arch { margin: 0 0 12px; }
+  .archttl { font-size: 12px; font-weight: 700; color: #4a4d53; padding: 4px 14px; }
+  .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; background: #fff;
+              border-top: 1px solid #c9ccd2; border-bottom: 1px solid #c9ccd2; }
+  .grid { display: inline-block; min-width: max-content; }
+  .row { display: flex; align-items: stretch; }
+  .lbl { flex: 0 0 var(--lw); position: sticky; left: 0; z-index: 2; background: #f1f2f4;
+         border-right: 1px solid #b6b9bf; font-size: 11px; color: #4a4d53; font-weight: 600;
+         display: flex; align-items: center; justify-content: center; }
+  .tcol { display: flex; border-left: 2px solid #9aa0a8; }
+  .tcol:first-of-type { border-left: none; }
+  .cell { width: var(--cw); height: var(--rh); display: flex; align-items: center; justify-content: center;
+          font-size: 15px; border-right: 1px dotted #d7dade; }
+  .cell:last-child { border-right: none; }
+  .cell.gm { color: #0033cc; }
+  .cell.gm.neg { color: #cc0000; }
+  .curcol { background: rgba(122,167,255,.18); }
+  .curcell { background: rgba(255,193,7,.55); outline: 2px solid #ff9f0a; outline-offset: -2px; font-weight: 700; }
+  .row.bop { }
+  .row.bop .cell { height: 9px; }
+  .lbl.bop, .lbl.num { color: #8a8d93; }
+  .numrow .lbl.num { font-weight: 700; }
+  .numcol { width: calc(var(--cw) * 3); height: 30px; display: flex; align-items: center; justify-content: center;
+            gap: 3px; border-left: 2px solid #9aa0a8; font-size: 13px; font-weight: 600; background: #fafbfc; }
+  .numcol:first-of-type { border-left: none; }
+  .numcol.curtooth { background: rgba(255,193,7,.25); }
+  .numcol .mob { font-size: 10px; color: #b25000; }
+  /* 缺牙整欄斜線 */
+  .tcol.missing .cell, .bopcol.missing .cell {
+    background:
+      repeating-linear-gradient(135deg, transparent 0 5px, rgba(120,124,130,.5) 5px 6px),
+      #eceef1;
+  }
+  .numcol.missing { background:
+      repeating-linear-gradient(135deg, transparent 0 6px, rgba(120,124,130,.5) 6px 7px), #eceef1;
+    color: #9aa0a8; text-decoration: line-through; }
+
+  /* ---- 底列 ---- */
+  #bottom { background: #1c1c1e; color: #eee; padding: 8px 14px calc(8px + env(safe-area-inset-bottom)); }
+  #heardWrap { font-size: 13px; color: #cfd2d8; }
+  #heardWrap b { color: #ffd60a; font-weight: 600; }
+  #heard { color: #fff; word-break: break-all; }
+  /* demo 文字輸入（平時隱藏，?demo=1 顯示） */
+  #demoRow { display: none; margin-top: 8px; gap: 8px; }
+  body.demo #demoRow { display: flex; }
+  #demoInput { flex: 1; font-size: 16px; padding: 10px 12px; border: 1px solid #555; border-radius: 8px;
+               background: #2c2c2e; color: #fff; }
+  #demoSend { background: #30d158; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- 首頁：病例清單 -->
+<section id="screen-list" class="screen">
+  <div class="bar"><h1>病例清單</h1><span class="spacer"></span></div>
+  <div class="content"><div id="caseList"></div></div>
+  <div class="footbtns"><button id="btnNew" class="primary">＋ 新增病人</button></div>
+</section>
+
+<!-- 新病人表頭 -->
+<section id="screen-form" class="screen">
+  <div class="bar"><h1>新病人 — 表頭</h1></div>
+  <div class="content">
+    <div class="field"><label>姓名</label><input id="fName" type="text" placeholder="測試病人"></div>
+    <div class="field"><label>病歷號</label><input id="fNumber" type="text" inputmode="numeric"></div>
+    <div class="field"><label>年齡</label><input id="fAge" type="text" inputmode="numeric"></div>
+    <div class="field"><label>性別</label>
+      <select id="fSex"><option value="">—</option><option value="F">女</option><option value="M">男</option></select></div>
+    <div class="field"><label>療程階段</label>
+      <select id="fStage"><option value="pre">初診</option><option value="re">再評估</option><option value="spt">支持性治療</option></select></div>
+    <div class="field"><label>檢查日期</label><input id="fDate" type="date"></div>
+  </div>
+  <div class="footbtns">
+    <button id="formBack" class="ghost">返回</button>
+    <button id="formNext" class="primary">下一步：缺牙預標</button>
+  </div>
+</section>
+
+<!-- 缺牙預標 -->
+<section id="screen-missing" class="screen">
+  <div class="bar"><h1>缺牙預標</h1></div>
+  <div class="content">
+    <p class="misshint">點掉缺牙的牙位（可於探測中再喊「缺牙」補標）。帶路會自動跳過缺牙、起點落在第一顆存在的牙。</p>
+    <div class="misscap">上顎（右 → 左）</div>
+    <div id="missUpper" class="missrow"></div>
+    <div class="misscap">下顎（右 → 左）</div>
+    <div id="missLower" class="missrow"></div>
+  </div>
+  <div class="footbtns">
+    <button id="missBack" class="ghost">返回</button>
+    <button id="missStart" class="primary">開始探測</button>
+  </div>
+</section>
+
+<!-- 主畫面 -->
+<section id="screen-main" class="screen">
+  <div id="topbar">
+    <div class="pinfo"><span id="mPatient">—</span><span id="mStage"></span></div>
+    <span id="micLight">⚪ 未收音</span>
+    <span class="spacer" style="flex:1"></span>
+    <span id="progress"></span>
+    <button id="btnUndo" class="topbtn">復原</button>
+    <button id="btnPause" class="topbtn">暫停</button>
+    <label class="tts"><input id="ttsToggle" type="checkbox">回讀</label>
+    <button id="btnBackList">清單</button>
+  </div>
+  <div id="banner"></div>
+  <div id="chart"></div>
+  <div id="bottom">
+    <div id="heardWrap"><b>聽到：</b><span id="heard">—</span></div>
+    <div id="demoRow">
+      <input id="demoInput" type="text" placeholder="模擬語音：輸入如「3 3」按 Enter" autocomplete="off">
+      <button id="demoSend">送出</button>
+    </div>
+  </div>
+</section>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
